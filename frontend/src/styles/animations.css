@@ -1,0 +1,80 @@
+/* ─── Intro overlay ─── */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  background: #070B14;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fade out after title sequence completes */
+  animation: introOut 0.65s ease 2.2s forwards;
+}
+
+.intro-content { text-align: center; }
+
+.intro-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(56px, 8vw, 88px);
+  letter-spacing: 0.26em;
+  color: var(--accent);
+  text-shadow: 0 0 70px rgba(245, 166, 35, 0.55);
+  line-height: 1;
+  opacity: 0;
+  animation: slideUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+}
+
+.intro-subtitle {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: clamp(9px, 1.1vw, 12px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(232, 228, 217, 0.6);
+  margin-top: 14px;
+  opacity: 0;
+  animation: slideUp 0.5s ease 1.0s forwards;
+}
+
+.intro-bar {
+  height: 1px;
+  width: 0;
+  margin: 18px auto 0;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(245, 166, 35, 0.7);
+  animation: barGrow 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1.5s forwards;
+}
+
+@keyframes introOut {
+  to { opacity: 0; pointer-events: none; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes barGrow {
+  to { width: 340px; }
+}
+
+/* ─── Feed item entry ─── */
+@keyframes feedSlide {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Signal-feed LIVE blink ─── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.28; }
+}
+
+/* ─── Stat counter ambient glow pulse ─── */
+@keyframes glowPulse {
+  0%, 100% { text-shadow: 0 0 8px  currentColor; }
+  50%       { text-shadow: 0 0 22px currentColor; }
+}
+
+.counter-val {
+  animation: glowPulse 3.2s ease-in-out infinite;
+}
