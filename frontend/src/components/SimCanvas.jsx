@@ -1,13 +1,14 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { GEO, MOLDOVA_BORDER } from '../config.js';
+import { WEST_ZONE, EAST_ZONE, WEST_EXIT, EAST_EXIT } from '../simulation/MapData.js';
 
-// ─── Orthographic Globe ──────────────────────────────────────────────────────
-const GLOBE_R   = 78;     // radius in canvas px
-const GLOBE_PAD = 18;     // distance from top-left corner
+// ─── Orthographic Globe ───────────────────────────────────────────────────────
+const GLOBE_R   = 78;
+const GLOBE_PAD = 18;
 const LAT0      = 47.0 * Math.PI / 180;
 const LON0      = 28.8 * Math.PI / 180;
 
-/** Orthographic projection: (lat°, lon°) → canvas {x, y, z}. z>0 = visible. */
+/** Orthographic projection: (lat°, lon°) → canvas {x, y, z}. z > 0 = visible. */
 function orthoProject(lat, lon, cx, cy) {
   const phi = lat * Math.PI / 180;
   const lam = lon * Math.PI / 180;
@@ -26,9 +27,9 @@ function drawGlobe(ctx, migFraction) {
     cx - GLOBE_R * 0.28, cy - GLOBE_R * 0.28, 0,
     cx, cy, GLOBE_R
   );
-  sphere.addColorStop(0,   'rgba(22, 44, 96, 0.97)');
-  sphere.addColorStop(0.65,'rgba(8, 18, 48, 0.97)');
-  sphere.addColorStop(1,   'rgba(4, 9, 28, 0.97)');
+  sphere.addColorStop(0,    'rgba(22, 44, 96, 0.97)');
+  sphere.addColorStop(0.65, 'rgba(8, 18, 48, 0.97)');
+  sphere.addColorStop(1,    'rgba(4, 9, 28, 0.97)');
   ctx.fillStyle = sphere;
   ctx.beginPath();
   ctx.arc(cx, cy, GLOBE_R, 0, Math.PI * 2);
@@ -36,8 +37,8 @@ function drawGlobe(ctx, migFraction) {
 
   // Atmosphere rim
   const atmo = ctx.createRadialGradient(cx, cy, GLOBE_R * 0.86, cx, cy, GLOBE_R * 1.10);
-  atmo.addColorStop(0,   'rgba(90, 150, 255, 0.18)');
-  atmo.addColorStop(1,   'transparent');
+  atmo.addColorStop(0, 'rgba(90, 150, 255, 0.18)');
+  atmo.addColorStop(1, 'transparent');
   ctx.fillStyle = atmo;
   ctx.beginPath();
   ctx.arc(cx, cy, GLOBE_R * 1.10, 0, Math.PI * 2);
@@ -73,7 +74,7 @@ function drawGlobe(ctx, migFraction) {
     ctx.stroke();
   }
 
-  // Moldova fill
+  // Moldova fill (intensity driven by migration fraction)
   ctx.fillStyle = `rgba(245,166,35,${(0.06 + migFraction * 0.18).toFixed(3)})`;
   ctx.beginPath();
   let first = true;
@@ -85,7 +86,7 @@ function drawGlobe(ctx, migFraction) {
   ctx.closePath();
   ctx.fill();
 
-  // Moldova border
+  // Moldova border line
   ctx.strokeStyle = `rgba(245,166,35,${(0.65 + migFraction * 0.3).toFixed(3)})`;
   ctx.lineWidth   = 1.4;
   first = true;
@@ -98,11 +99,11 @@ function drawGlobe(ctx, migFraction) {
   ctx.stroke();
 
   // Centroid migration-intensity pulse
-  const pc = orthoProject(47.005, 28.857, cx, cy);
+  const pc   = orthoProject(47.005, 28.857, cx, cy);
   const pulsR = 4 + migFraction * 10;
   const pulse = ctx.createRadialGradient(pc.x, pc.y, 0, pc.x, pc.y, pulsR);
-  pulse.addColorStop(0,   `rgba(231,76,60,${(0.5 + migFraction * 0.45).toFixed(2)})`);
-  pulse.addColorStop(1,   'transparent');
+  pulse.addColorStop(0, `rgba(231,76,60,${(0.5 + migFraction * 0.45).toFixed(2)})`);
+  pulse.addColorStop(1, 'transparent');
   ctx.fillStyle = pulse;
   ctx.beginPath();
   ctx.arc(pc.x, pc.y, pulsR, 0, Math.PI * 2);
@@ -125,9 +126,11 @@ function drawGlobe(ctx, migFraction) {
   ctx.textAlign = 'left';
 }
 
+// ─── Map projection helpers ───────────────────────────────────────────────────
+
 const SC = { S: '#4A90D9', I: '#F5A623', M: '#E74C3C', R: '#2ECC71' };
 
-/** Map (lat, lon) → canvas (x, y) with padding px on each side. */
+/** Map (lat, lon) → canvas (x, y). */
 function project(lat, lon, W, H, pad = 22) {
   const x = pad + ((lon - GEO.lonMin) / (GEO.lonMax - GEO.lonMin)) * (W - 2 * pad);
   const y = pad + ((GEO.latMax - lat) / (GEO.latMax - GEO.latMin)) * (H - 2 * pad);
@@ -138,6 +141,49 @@ function tickToDate(t) {
   const y = 2015 + Math.floor(t / 12);
   const m = (t % 12) + 1;
   return `${String(m).padStart(2, '0')} / ${y}`;
+}
+
+// ─── Drawing functions ────────────────────────────────────────────────────────
+
+/**
+ * Faint glow halos marking the external emigrant zones (Romania/EU and Ukraine/Russia).
+ * Drawn before the Moldova border so the border sits on top.
+ */
+function drawExternalZones(ctx, W, H) {
+  // ── West zone (Romania / EU) ────────────────────────────────────────────────
+  const [wx, wy] = project(WEST_ZONE.latC, WEST_ZONE.lonC, W, H);
+  const wg = ctx.createRadialGradient(wx, wy, 0, wx, wy, 88);
+  wg.addColorStop(0,   'rgba(74, 144, 217, 0.055)');
+  wg.addColorStop(0.55,'rgba(74, 144, 217, 0.022)');
+  wg.addColorStop(1,   'transparent');
+  ctx.fillStyle = wg;
+  ctx.beginPath();
+  ctx.arc(wx, wy, 88, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font      = '8px "IBM Plex Mono",monospace';
+  ctx.fillStyle = 'rgba(74, 144, 217, 0.32)';
+  ctx.textAlign = 'center';
+  ctx.fillText('EU / Romania', wx, wy - 8);
+  ctx.fillStyle = 'rgba(74, 144, 217, 0.18)';
+  ctx.fillText('← emigrant zone', wx, wy + 6);
+
+  // ── East zone (Ukraine / Russia) ────────────────────────────────────────────
+  const [ex, ey] = project(EAST_ZONE.latC, EAST_ZONE.lonC, W, H);
+  const eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 62);
+  eg.addColorStop(0,   'rgba(231, 76, 60, 0.048)');
+  eg.addColorStop(0.55,'rgba(231, 76, 60, 0.018)');
+  eg.addColorStop(1,   'transparent');
+  ctx.fillStyle = eg;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 62, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(231, 76, 60, 0.32)';
+  ctx.fillText('Ukraine / Russia', ex, ey - 8);
+  ctx.fillStyle = 'rgba(231, 76, 60, 0.18)';
+  ctx.fillText('emigrant zone →', ex, ey + 6);
+  ctx.textAlign = 'left';
 }
 
 function drawBorder(ctx, W, H) {
@@ -158,12 +204,42 @@ function drawBorder(ctx, W, H) {
 
 function drawGlow(ctx, W, H) {
   const [cx, cy] = project(47.005, 28.857, W, H);
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.5);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.38);
   g.addColorStop(0,   'rgba(245,166,35,0.07)');
   g.addColorStop(0.4, 'rgba(74,144,217,0.04)');
   g.addColorStop(1,   'transparent');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+}
+
+/**
+ * Amber glow centred on the centroid of I-state agents currently waiting at each
+ * border exit. Glow radius scales with cluster size, giving a clear visual signal
+ * of pre-emigration pressure building at the border.
+ */
+function drawBorderClusterGlow(ctx, agents, W, H) {
+  const westCluster = agents.filter(a => a.state === 'I' && a.nearBorder && a.migDir === 'west');
+  const eastCluster = agents.filter(a => a.state === 'I' && a.nearBorder && a.migDir === 'east');
+
+  for (const [cluster] of [[westCluster], [eastCluster]]) {
+    if (cluster.length < 4) continue;
+    let sumX = 0, sumY = 0;
+    for (const a of cluster) {
+      const [x, y] = project(a.lat, a.lon, W, H);
+      sumX += x; sumY += y;
+    }
+    const cx = sumX / cluster.length;
+    const cy = sumY / cluster.length;
+    const r  = Math.min(16 + cluster.length * 0.65, 52);
+    const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0,   'rgba(245,166,35,0.20)');
+    g.addColorStop(0.45,'rgba(245,166,35,0.09)');
+    g.addColorStop(1,   'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawDateStamp(ctx, W, tick) {
@@ -183,7 +259,7 @@ function drawLegend(ctx, W, H, s) {
   const lbls   = { S: 'Staying', I: 'Intent', M: 'Migrated', R: 'Returned' };
   const lx = W - 142, ly = H - 96;
 
-  ctx.fillStyle = 'rgba(10,14,26,0.78)';
+  ctx.fillStyle = 'rgba(10,14,26,0.80)';
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(lx - 8, ly - 8, 138, 90, 4);
   else ctx.rect(lx - 8, ly - 8, 138, 90);
@@ -203,6 +279,8 @@ function drawLegend(ctx, W, H, s) {
   });
 }
 
+// ─── React component ──────────────────────────────────────────────────────────
+
 export default function SimCanvas({ simRef, stats }) {
   const canvasRef  = useRef(null);
   const rafRef     = useRef(null);
@@ -217,10 +295,7 @@ export default function SimCanvas({ simRef, stats }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const sync = () => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-    };
+    const sync = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
     sync();
     const ro = new ResizeObserver(sync);
     ro.observe(canvas);
@@ -237,17 +312,20 @@ export default function SimCanvas({ simRef, stats }) {
       const W = canvas.width;
       const H = canvas.height;
 
+      // ── Background ──────────────────────────────────────────────────────────
       ctx.fillStyle = '#070B14';
       ctx.fillRect(0, 0, W, H);
 
+      // ── Ambient glow + external zones + Moldova border ───────────────────────
       drawGlow(ctx, W, H);
+      drawExternalZones(ctx, W, H);
       drawBorder(ctx, W, H);
 
-      const sim = simRef.current;
-      if (sim && sim.agents.length > 0) {
-        const agents = sim.agents;
+      const sim    = simRef.current;
+      const agents = sim?.agents ?? [];
 
-        // ── Network edges: I↔M neighbors (capped at 3 per agent for perf) ──
+      if (agents.length > 0) {
+        // ── Network edges: I↔M neighbors (capped at 3 per agent for perf) ─────
         ctx.globalAlpha = 0.11;
         ctx.lineWidth   = 0.45;
         for (const a of agents) {
@@ -263,30 +341,33 @@ export default function SimCanvas({ simRef, stats }) {
         }
         ctx.globalAlpha = 1;
 
-        // ── Halos (drawn behind dots) ──
+        // ── Border cluster glow ──────────────────────────────────────────────
+        drawBorderClusterGlow(ctx, agents, W, H);
+
+        // ── Agent halos (drawn behind dots) ─────────────────────────────────
         for (const a of agents) {
           if (a.halo < 0.04) continue;
-          const [x, y] = project(a.lat, a.lon, W, H);
-          const radius  = 3 + a.halo * 13;
-          const hex     = SC[a.state];
-          const alpha   = Math.round(a.halo * 180).toString(16).padStart(2, '0');
-          const hg      = ctx.createRadialGradient(x, y, 0, x, y, radius);
+          const [x, y]  = project(a.lat, a.lon, W, H);
+          const radius   = 3 + a.halo * 13;
+          const hex      = SC[a.state];
+          const alpha    = Math.round(a.halo * 180).toString(16).padStart(2, '0');
+          const hg       = ctx.createRadialGradient(x, y, 0, x, y, radius);
           hg.addColorStop(0, hex + alpha);
           hg.addColorStop(1, 'transparent');
-          ctx.fillStyle = hg;
+          ctx.fillStyle  = hg;
           ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
         }
 
-        // ── Agent dots ──
+        // ── Agent dots ───────────────────────────────────────────────────────
         for (const a of agents) {
-          const [x, y] = project(a.lat, a.lon, W, H);
+          const [x, y]    = project(a.lat, a.lon, W, H);
           ctx.globalAlpha = a.state === 'M' ? 0.92 : 0.72;
           ctx.fillStyle   = SC[a.state];
           ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
 
-        // ── Hover ring ──
+        // ── Hover ring ───────────────────────────────────────────────────────
         const hov = hoverRef.current;
         if (hov) {
           const [hx, hy] = project(hov.lat, hov.lon, W, H);
@@ -296,7 +377,8 @@ export default function SimCanvas({ simRef, stats }) {
         }
       }
 
-      const s = statsRef.current;
+      // ── Overlays ─────────────────────────────────────────────────────────────
+      const s     = statsRef.current;
       const total = (s.S || 0) + (s.I || 0) + (s.M || 0) + (s.R || 0) || 1;
       drawGlobe(ctx, (s.M || 0) / total);
       drawDateStamp(ctx, W, s.tick || 0);
@@ -307,7 +389,7 @@ export default function SimCanvas({ simRef, stats }) {
 
     rafRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [simRef]); // only depends on stable ref
+  }, [simRef]);
 
   const onMouseMove = useCallback(e => {
     const canvas = canvasRef.current;
@@ -338,14 +420,16 @@ export default function SimCanvas({ simRef, stats }) {
       tip.style.display = 'block';
       tip.style.left    = `${cx}px`;
       tip.style.top     = `${cy}px`;
+      const zStr  = typeof closest.lastZ === 'number' ? closest.lastZ.toFixed(2) : '—';
+      const nPct  = Math.round((closest.N_i ?? 0) * 100);
+      const dPct  = Math.round((closest.D_i ?? 0) * 100);
       tip.innerHTML = `
         <div class="tt-r"><span class="tt-k">Agent</span><span class="tt-v">#${closest.id}</span></div>
         <div class="tt-r"><span class="tt-k">Region</span><span class="tt-v">${closest.region.name}</span></div>
         <div class="tt-r"><span class="tt-k">State</span><span class="tt-v" style="color:${SC[closest.state]}">${closest.state}</span></div>
-        <div class="tt-r"><span class="tt-k">w_loc</span><span class="tt-v">$${(closest.w_loc * 1000).toFixed(0)}</span></div>
-        <div class="tt-r"><span class="tt-k">w_ext</span><span class="tt-v">$${(closest.w_ext * 1000).toFixed(0)}</span></div>
-        <div class="tt-r"><span class="tt-k">δ (opt)</span><span class="tt-v">${closest.bias_opt.toFixed(2)}</span></div>
-        <div class="tt-r"><span class="tt-k">links</span><span class="tt-v">${closest.connections.length}</span></div>
+        <div class="tt-r"><span class="tt-k">Z-score</span><span class="tt-v">${zStr}</span></div>
+        <div class="tt-r"><span class="tt-k">Ngbr mig</span><span class="tt-v">${nPct}%</span></div>
+        <div class="tt-r"><span class="tt-k">Ngbr int</span><span class="tt-v">${dPct}%</span></div>
       `;
     } else {
       tip.style.display = 'none';

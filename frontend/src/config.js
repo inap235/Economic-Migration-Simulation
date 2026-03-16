@@ -7,8 +7,9 @@ export const REGIONS = [
   { name: 'Transnistria',lat: 47.200, lon: 29.400, weight: 0.07, spread: 0.08 },
 ];
 
-// Bounding box for lat/lon → canvas projection
-export const GEO = { latMin: 45.4, latMax: 48.6, lonMin: 26.5, lonMax: 30.25 };
+// Bounding box for lat/lon → canvas projection.
+// Expanded west (24.3) and east (31.8) to show external emigrant zones outside Moldova.
+export const GEO = { latMin: 45.0, latMax: 49.0, lonMin: 24.3, lonMax: 31.8 };
 
 // Simplified Moldova border polygon [lat, lon]
 export const MOLDOVA_BORDER = [
