@@ -12,17 +12,49 @@ Add a live finite automaton diagram to the left panel of the Moldova Migration S
 
 ## Architecture & Data Flow
 
-### Transition tracking (`App.jsx`)
+### Transition counting in `Simulation.tick()`
 
-- A `useRef` holds a circular buffer of the last 30 tick snapshots. Each snapshot is `{ SI, IM, MR, RS }` — counts of each transition type that fired in that tick.
-- On every tick, `newEvents` (already returned by `Simulation.tick()`) is scanned to count transitions by type. The snapshot is pushed into the buffer; the buffer is trimmed to 30 entries.
-- Averaged rates `{ SI, IM, MR, RS }` are derived from the buffer and passed as the `transitionRates` prop to `LeftPanel` → `AutomatonPanel`.
-- Live agent counts come from the existing `stats` prop (`{ S, I, M, R }`).
-- Raw `newEvents` are also forwarded so `AutomatonPanel` can spawn particles.
+`Simulation.tick()` currently caps `newEvents` to 5 before returning (line 162). This cap is intentional for the event feed but must not be used for rate tracking.
+
+**Resolution:** Inside the `tick()` loop, introduce four local counters (`SI`, `IM`, `MR`, `RS`) incremented alongside — and independently of — `newEvents.push`. Return them as `transitionCounts` in the tick result. The final return becomes:
+
+```js
+return {
+  stats: { ...counts, tick: this.tick_count },
+  newEvents: newEvents.slice(0, 5),
+  transitionCounts: { SI, IM, MR, RS },
+};
+```
+
+`App.jsx` reads `transitionCounts` for the rate buffer. `newEvents` (still capped at 5) is used only for the event feed and particle spawning.
 
 ### `R→S` event emission (`Simulation.js`)
 
-`R→S` transitions currently fire silently. A one-line change adds a `newEvents` push for this transition so particles appear on the R→S edge.
+`R→S` transitions currently fire silently. Add a `newEvents.push` and set `agent.transitionChannel`:
+
+```js
+newEvents.push({
+  id: `${this.tick_count}-${agent.id}`, type: 'R→S', agentId: agent.id,
+  region: agent.region.name, channel: 'return', Z: '—', neighborPct: 0,
+});
+RS++;
+```
+
+Do **not** set `agent.transitionChannel` for R→S — consistent with `M→R` which also does not set it. `AutomatonPanel` derives the edge key from `event.type`, not from `agent.transitionChannel`.
+
+### Rolling rate buffer (`App.jsx`)
+
+- `const [particleTick, setParticleTick] = useState(0)` — integer state incremented **unconditionally on every tick**.
+- The existing tick loop in `App.jsx` destructures `{ stats: s, newEvents }` from `tick()` — update this to `{ stats: s, newEvents, transitionCounts }`.
+- A `useRef` (`bufferRef`) holds a circular buffer of the last 30 tick `transitionCounts` snapshots. Push on each tick; trim to 30.
+- Averaged rates `{ SI, IM, MR, RS }` (buffer mean per field) are passed as `transitionRates` to `LeftPanel` → `AutomatonPanel`.
+- `eventsRef = useRef([])` stores the latest tick's `newEvents`. Set `eventsRef.current = newEvents` **before** calling `setParticleTick` in the same synchronous `setInterval` callback, so the ref is populated when the effect reads it.
+- `setParticleTick(n => n + 1)` must be called **unconditionally**, outside and independent of the existing `if (newEvents.length > 0)` guard — the automaton effect must fire every tick.
+- **On reset:** `handleReset` flushes `bufferRef.current = []`.
+
+### Colour source
+
+`LeftPanel.jsx` currently declares a local `STATE_COLORS` constant (line 12) that duplicates `COLORS` from `config.js`. **Replace it** with `import { COLORS } from '../config.js'` and rename usages from `STATE_COLORS[st]` to `COLORS[st]`. `AutomatonPanel.jsx` should do the same — import `COLORS` from `config.js` directly. This keeps one source of truth for state colours.
 
 ---
 
@@ -36,11 +68,12 @@ A self-contained SVG React component added at the bottom of `LeftPanel.jsx`, bel
 |------|------|-------------|
 | `stats` | `{ S, I, M, R }` | Live agent counts per state |
 | `transitionRates` | `{ SI, IM, MR, RS }` | Rolling 30-tick avg transitions/tick |
-| `newEvents` | `Array<{ type }>` | Events from the latest tick (particle triggers) |
+| `eventsRef` | `React.MutableRefObject<Array>` | Ref holding latest tick's `newEvents` |
+| `particleTick` | `number` | useState integer; increments every tick to trigger spawn effect |
 
 ### Visual Layout
 
-Diamond/rhombus node arrangement within a ~200×180px SVG:
+Diamond/rhombus node arrangement. SVG uses `viewBox="0 0 200 180"` with `width="100%"` so it scales responsively to the panel width.
 
 ```
         [S]
@@ -50,32 +83,28 @@ Diamond/rhombus node arrangement within a ~200×180px SVG:
         [M]
 ```
 
-**Nodes** — circles, radius 28px, filled with existing state colours:
-- S: `#4A90D9` (blue)
-- I: `#F5A623` (orange)
-- M: `#E74C3C` (red)
-- R: `#2ECC71` (green)
+**Nodes** — circles, radius 28px. Colours from `COLORS` imported from `config.js`. Each node displays the state letter (bold) and agent count on a second line.
 
-Each node displays the state letter and agent count (two lines, small font).
+**Edges** — 4 curved `<path>` elements with SVG `<marker>` arrowhead definitions: `S→I`, `I→M`, `M→R`, `R→S`. Each edge has a mid-path rate label (e.g. `2.4/t`) in small, dimmed text (`opacity: 0.55`).
 
-**Edges** — 4 curved `<path>` elements with SVG arrowhead markers:
-- `S→I`, `I→M`, `M→R`, `R→S`
-
-Each edge has a mid-path rate label (e.g. `2.4/t`) in small, dimmed text.
+**During spawning / all-zero state:** The diagram renders normally with zero counts and zero rates — no special placeholder needed.
 
 ### Particle System
 
-- On each `newEvents` batch, one particle is spawned per event on its corresponding edge path.
-- Particles are capped at **8 per edge** to prevent visual clutter during high-activity bursts.
-- Each particle stores `{ edgeKey, progress: 0 }` and advances `~0.04` per animation frame.
-- Position is computed via `pathRef.current.getPointAtLength(progress × path.getTotalLength())`.
-- Particles fade in at start and fade out near completion (opacity driven by progress).
-- Particle colour matches the source state colour.
-- The `requestAnimationFrame` loop runs only while particles are present and cancels itself when the array is empty to avoid idle CPU usage.
+- `AutomatonPanel` maintains a `particlesRef = useRef([])` array (not React state — updates are driven by the rAF loop).
+- An `isLoopRunning = useRef(false)` guards against double-starting the rAF loop.
+- A `useEffect([particleTick])` reads `eventsRef.current`, maps each event to a particle `{ edgeKey, progress: 0 }`, appends them, and starts the rAF loop if not already running (`!isLoopRunning.current`).
+- **`edgeKey` derivation:** `event.type.replace('→', '')` — e.g. `'S→I'` → `'SI'`, `'R→S'` → `'RS'`.
+- **Particle cap:** 8 per edge. Excess particles on arrival are **dropped (newest discarded)** — if a given edge already has 8 particles, the incoming particle for that edge is skipped.
+- Each rAF frame: advance all `progress` by `~0.04`, remove particles with `progress >= 1`, force a re-render via `setRenderTick(n => n+1)`, then either schedule the next frame or set `isLoopRunning.current = false` if the array is empty.
+- The `isLoopRunning` ref prevents the race where new events arrive at the exact frame the loop would cancel: the spawn effect always restarts the loop if `!isLoopRunning.current`.
+- Particle colour: `COLORS[sourceState]` where `sourceState` is derived from the event type (first character of `type`).
+- **Path refs:** `pathRefs = useRef({})` — a keyed object, one entry per edge, populated via `ref={el => pathRefs.current[edgeKey] = el}` on each `<path>` element. Particle position: `pathRefs.current[particle.edgeKey].getPointAtLength(progress × pathRefs.current[particle.edgeKey].getTotalLength())`.
+- Opacity: `Math.min(progress / 0.1, 1) × Math.min((1 - progress) / 0.1, 1)` — fade in first 10%, fade out last 10%.
 
-### SVG Path References
+### Cleanup
 
-Four `useRef` instances (one per edge path) allow synchronous `getPointAtLength` calls at 60 fps. With a maximum of 32 total particles (8 × 4 edges) this is well within safe performance bounds.
+`useEffect` cleanup in `AutomatonPanel` cancels any pending rAF handle and resets `isLoopRunning.current = false` on unmount, so a remount (e.g. hot-reload) starts with a clean state.
 
 ---
 
@@ -83,9 +112,9 @@ Four `useRef` instances (one per edge path) allow synchronous `getPointAtLength`
 
 | File | Change |
 |------|--------|
-| `frontend/src/simulation/Simulation.js` | Add `newEvents` push for R→S transition |
-| `frontend/src/App.jsx` | Add 30-tick transition buffer; compute `transitionRates`; pass to `LeftPanel` |
-| `frontend/src/components/LeftPanel.jsx` | Accept + forward `transitionRates` and `newEvents`; render `<AutomatonPanel>` |
+| `frontend/src/simulation/Simulation.js` | Add 4 local tick counters; return `transitionCounts`; add R→S event push |
+| `frontend/src/App.jsx` | Add `particleTick` useState, `eventsRef`, 30-tick `bufferRef`; compute `transitionRates`; flush buffer on reset; pass new props to `LeftPanel` |
+| `frontend/src/components/LeftPanel.jsx` | Replace local `STATE_COLORS` with `COLORS` import; accept + forward `transitionRates`, `eventsRef`, `particleTick`; render `<AutomatonPanel>` |
 | `frontend/src/components/AutomatonPanel.jsx` | New component (SVG diagram + particle system) |
 
 ---
