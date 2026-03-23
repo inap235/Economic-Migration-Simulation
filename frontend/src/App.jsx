@@ -19,6 +19,11 @@ export default function App() {
   // 'intro' → 'spawning' → 'running'
   const [phase,   setPhase]   = useState('intro');
 
+  const [particleTick,    setParticleTick]    = useState(0);
+  const [transitionRates, setTransitionRates] = useState({ SI: 0, IM: 0, MR: 0, RS: 0 });
+  const bufferRef = useRef([]);  // circular buffer of last 30 transitionCounts snapshots
+  const eventsRef = useRef([]);  // latest tick's newEvents (read by AutomatonPanel)
+
   // Create simulation instance on mount; transition out of intro after 2.8 s
   useEffect(() => {
     simRef.current = new Simulation(DEFAULT_SLIDERS);
@@ -45,8 +50,19 @@ export default function App() {
   useEffect(() => {
     if (!running || phase !== 'running') return;
     const iv = setInterval(() => {
-      const { stats: s, newEvents } = simRef.current.tick();
+      const { stats: s, newEvents, transitionCounts } = simRef.current.tick();
       setStats(s);
+
+      // Rolling 30-tick buffer for transition rates
+      bufferRef.current = [...bufferRef.current, transitionCounts].slice(-30);
+      const buf = bufferRef.current;
+      const avg = field => buf.reduce((sum, e) => sum + (e[field] ?? 0), 0) / buf.length;
+      setTransitionRates({ SI: avg('SI'), IM: avg('IM'), MR: avg('MR'), RS: avg('RS') });
+
+      // Store events ref BEFORE incrementing particleTick
+      eventsRef.current = newEvents;
+      setParticleTick(n => n + 1);  // unconditional — fires automaton effect every tick
+
       if (newEvents.length > 0) {
         setEvents(prev => [...prev, ...newEvents].slice(-20));
       }
@@ -66,6 +82,8 @@ export default function App() {
 
   const handleReset = useCallback(() => {
     setRunning(false);
+    bufferRef.current  = [];
+    eventsRef.current  = [];
     setEvents([]);
     setPhase('spawning');
     simRef.current?.reset(sliders);
@@ -86,6 +104,9 @@ export default function App() {
           onReset={handleReset}
           running={running}
           history={history}
+          transitionRates={transitionRates}
+          eventsRef={eventsRef}
+          particleTick={particleTick}
         />
         <SimCanvas simRef={simRef} stats={stats} />
         <EventFeed events={events} />
