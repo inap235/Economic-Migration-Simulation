@@ -4,6 +4,7 @@
 
 ---
 
+
 ## Overview
 
 Add a live finite automaton diagram to the left panel of the Moldova Migration Simulator dashboard. The diagram shows the four SIMR states as nodes and the four transitions as animated edges, with live agent counts on each node and rolling-average transition rates on each edge. Particles flow along edges whenever transitions fire.
