@@ -18,15 +18,14 @@ const EDGES = {
   RS: { d: 'M 160,78  Q 160,55  113,42',      mid: [156, 56]  },
 };
 
-// Incrementing counter for stable particle keys
-let _particleId = 0;
-
 export default function AutomatonPanel({ stats, transitionRates, eventsRef, particleTick }) {
   const [renderTick,  setRenderTick]  = useState(0);
   const particlesRef  = useRef([]);
   const isLoopRunning = useRef(false);
   const rafHandleRef  = useRef(null);
   const pathRefs      = useRef({});
+  const particleIdRef = useRef(0);
+  const markerId      = useRef(`fa-arrow-${Math.random().toString(36).slice(2)}`);
 
   // ── Particle system ──────────────────────────────────────────────────────
 
@@ -38,7 +37,7 @@ export default function AutomatonPanel({ stats, transitionRates, eventsRef, part
       if (!EDGES[edgeKey]) continue;
       const count = particlesRef.current.filter(p => p.edgeKey === edgeKey).length;
       if (count >= 8) continue;  // cap: drop newest
-      particlesRef.current.push({ edgeKey, progress: 0, id: ++_particleId });
+      particlesRef.current.push({ edgeKey, progress: 0, id: ++particleIdRef.current });
     }
 
     // Start rAF loop if not already running
@@ -64,6 +63,7 @@ export default function AutomatonPanel({ stats, transitionRates, eventsRef, part
     return () => {
       cancelAnimationFrame(rafHandleRef.current);
       isLoopRunning.current = false;
+      particlesRef.current  = [];
     };
   }, []);
 
@@ -72,7 +72,7 @@ export default function AutomatonPanel({ stats, transitionRates, eventsRef, part
   return (
     <svg viewBox="0 0 200 180" width="100%" style={{ display: 'block', overflow: 'visible' }}>
       <defs>
-        <marker id="fa-arrow" markerWidth="6" markerHeight="6"
+        <marker id={markerId.current} markerWidth="6" markerHeight="6"
           refX="5" refY="3" orient="auto">
           <path d="M0,0 L0,6 L6,3 z" fill="rgba(232,228,217,0.35)" />
         </marker>
@@ -90,7 +90,7 @@ export default function AutomatonPanel({ stats, transitionRates, eventsRef, part
               fill="none"
               stroke="rgba(232,228,217,0.18)"
               strokeWidth="1.5"
-              markerEnd="url(#fa-arrow)"
+              markerEnd={`url(#${markerId.current})`}
             />
             <text
               x={edge.mid[0]} y={edge.mid[1]}

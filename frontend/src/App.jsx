@@ -60,11 +60,9 @@ export default function App() {
       const avg = field => buf.reduce((sum, e) => sum + (e[field] ?? 0), 0) / buf.length;
       setTransitionRates({ SI: avg('SI'), IM: avg('IM'), MR: avg('MR'), RS: avg('RS') });
 
-      // Store events ref BEFORE incrementing particleTick
-      eventsRef.current = newEvents;
-      setParticleTick(n => n + 1);  // unconditional — fires automaton effect every tick
-
       if (newEvents.length > 0) {
+        eventsRef.current = newEvents;
+        setParticleTick(n => n + 1);
         setEvents(prev => [...prev, ...newEvents].slice(-20));
       }
     }, TICK_MS);
