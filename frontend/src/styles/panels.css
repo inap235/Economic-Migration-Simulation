@@ -235,6 +235,18 @@
   border-top: 1px solid var(--border);
 }
 
+.automaton-section {
+  padding: 0 8px 8px;
+}
+
+.automaton-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(232, 228, 217, 0.4);
+  margin-bottom: 6px;
+}
+
 /* ═══════════════════════════════════════════
    RIGHT PANEL — Signal Feed
 ═══════════════════════════════════════════ */

@@ -1,5 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import MiniChart from './MiniChart.jsx';
+import AutomatonPanel from './AutomatonPanel.jsx';
+import { COLORS } from '../config.js';
 
 const SLIDER_DEFS = [
   { key: 'wageGap',         label: 'Wage Gap',           min: 0.5, max: 2.0, step: 0.05 },
@@ -9,7 +11,6 @@ const SLIDER_DEFS = [
   { key: 'cognitiveBias',   label: 'Cognitive Bias (δ)', min: 0.0, max: 1.0, step: 0.05 },
 ];
 
-const STATE_COLORS = { S: '#4A90D9', I: '#F5A623', M: '#E74C3C', R: '#2ECC71' };
 const STATE_LABELS = { S: 'Staying', I: 'Intent', M: 'Migrated', R: 'Returned' };
 
 /** Lerp-animated counter: visually interpolates toward `target`. */
@@ -34,7 +35,7 @@ function AnimCounter({ target, color }) {
   return <span className="counter-val" style={{ color }}>{disp.toLocaleString()}</span>;
 }
 
-export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, onReset, running, history }) {
+export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, onReset, running, history, transitionRates, eventsRef, particleTick }) {
   const total = (stats.S || 0) + (stats.I || 0) + (stats.M || 0) + (stats.R || 0) || 1;
 
   return (
@@ -48,19 +49,19 @@ export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, 
       {/* ── State counters ── */}
       <section className="stat-grid">
         {['S', 'I', 'M', 'R'].map(st => (
-          <div key={st} className="stat-cell" style={{ '--c': STATE_COLORS[st] }}>
+          <div key={st} className="stat-cell" style={{ '--c': COLORS[st] }}>
             <div className="stat-label">{STATE_LABELS[st]}</div>
-            <AnimCounter target={stats[st] || 0} color={STATE_COLORS[st]} />
+            <AnimCounter target={stats[st] || 0} color={COLORS[st]} />
             <div className="stat-bar">
               <div
                 className="stat-bar-fill"
                 style={{
                   width: `${((stats[st] || 0) / total * 100).toFixed(1)}%`,
-                  background: STATE_COLORS[st],
+                  background: COLORS[st],
                 }}
               />
             </div>
-            <div className="stat-pct" style={{ color: STATE_COLORS[st] }}>
+            <div className="stat-pct" style={{ color: COLORS[st] }}>
               {((stats[st] || 0) / total * 100).toFixed(1)}%
             </div>
           </div>
@@ -110,6 +111,17 @@ export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, 
       <section className="minichart-section">
         <div className="minichart-label">Migrated % · last 60 ticks</div>
         <MiniChart history={history} />
+      </section>
+
+      <div className="panel-rule" />
+      <section className="automaton-section">
+        <div className="automaton-label">State Automaton</div>
+        <AutomatonPanel
+          stats={stats}
+          transitionRates={transitionRates}
+          eventsRef={eventsRef}
+          particleTick={particleTick}
+        />
       </section>
 
       <div className="panel-footer">
