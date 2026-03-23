@@ -1,5 +1,5 @@
 const ICONS    = { family: '👨‍👩‍👧', facebook: '📘', tiktok: '🎵', wage: '💰', return: '🏠' };
-const T_COLORS = { 'S→I': '#F5A623', 'I→M': '#E74C3C', 'M→R': '#2ECC71' };
+const T_COLORS = { 'S→I': '#F5A623', 'I→M': '#E74C3C', 'M→R': '#2ECC71', 'R→S': '#2ECC71' };
 
 export default function EventFeed({ events }) {
   return (

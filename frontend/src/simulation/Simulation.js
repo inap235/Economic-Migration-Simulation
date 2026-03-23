@@ -79,13 +79,14 @@ export class Simulation {
 
   tick() {
     const n = this.agents.length;
-    if (!n) return { stats: { S: 0, I: 0, M: 0, R: 0, tick: 0 }, newEvents: [] };
+    if (!n) return { stats: { S: 0, I: 0, M: 0, R: 0, tick: 0 }, newEvents: [], transitionCounts: { SI: 0, IM: 0, MR: 0, RS: 0 } };
 
     // Snapshot network influence for all agents before evaluating any transitions.
     // This prevents cascade effects within a single tick.
     this._updateNetworkInfluence();
 
     const newEvents = [];
+    let SI = 0, IM = 0, MR = 0, RS = 0;
 
     for (const agent of this.agents) {
       agent.halo = Math.max(0, agent.halo - 0.08);
@@ -106,6 +107,7 @@ export class Simulation {
             region: agent.region.name, channel: ch,
             Z: Z.toFixed(2), neighborPct: Math.round(agent.N_i * 100),
           });
+          SI++;
         }
 
       } else if (agent.state === 'I') {
@@ -123,6 +125,7 @@ export class Simulation {
             region: agent.region.name, channel: ch,
             Z: Z.toFixed(2), neighborPct: Math.round(agent.N_i * 100),
           });
+          IM++;
         }
 
       } else if (agent.state === 'M') {
@@ -136,6 +139,7 @@ export class Simulation {
             region: agent.region.name, channel: 'return',
             Z: '—', neighborPct: 0,
           });
+          MR++;
         }
 
       } else if (agent.state === 'R') {
@@ -145,6 +149,11 @@ export class Simulation {
           agent.halo       = 0.4;
           agent.migDir     = null;
           agent.nearBorder = false;
+          newEvents.push({
+            id: `${this.tick_count}-${agent.id}`, type: 'R→S', agentId: agent.id,
+            region: agent.region.name, channel: 'return', Z: '—', neighborPct: 0,
+          });
+          RS++;
         }
       }
 
@@ -159,7 +168,11 @@ export class Simulation {
     this.history.push({ ...counts, tick: this.tick_count });
     if (this.history.length > 300) this.history.shift();
 
-    return { stats: { ...counts, tick: this.tick_count }, newEvents: newEvents.slice(0, 5) };
+    return {
+      stats: { ...counts, tick: this.tick_count },
+      newEvents: newEvents.slice(0, 5),
+      transitionCounts: { SI, IM, MR, RS },
+    };
   }
 
   getStats() {
