@@ -53,8 +53,9 @@ export default function App() {
       const { stats: s, newEvents, transitionCounts } = simRef.current.tick();
       setStats(s);
 
-      // Rolling 30-tick buffer for transition rates
-      bufferRef.current = [...bufferRef.current, transitionCounts].slice(-30);
+      // Rolling 30-tick buffer for transition rates (growing-window avg until 30 samples)
+      bufferRef.current.push(transitionCounts);
+      if (bufferRef.current.length > 30) bufferRef.current.shift();
       const buf = bufferRef.current;
       const avg = field => buf.reduce((sum, e) => sum + (e[field] ?? 0), 0) / buf.length;
       setTransitionRates({ SI: avg('SI'), IM: avg('IM'), MR: avg('MR'), RS: avg('RS') });
