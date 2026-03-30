@@ -19,6 +19,11 @@ export default function App() {
   // 'intro' → 'spawning' → 'running'
   const [phase,   setPhase]   = useState('intro');
 
+  const [showNetwork, setShowNetwork] = useState(true);
+  const [deltaM, setDeltaM] = useState(0);
+  const [sliderHint, setSliderHint] = useState(null);
+  const prevMRef = useRef(0);
+
   const [particleTick,    setParticleTick]    = useState(0);
   const [transitionRates, setTransitionRates] = useState({ SI: 0, IM: 0, MR: 0, RS: 0 });
   const bufferRef = useRef([]);  // circular buffer of last 30 transitionCounts snapshots
@@ -53,6 +58,11 @@ export default function App() {
       const { stats: s, newEvents, transitionCounts } = simRef.current.tick();
       setStats(s);
 
+      const prevM = prevMRef.current;
+      const dM = (s.M || 0) - (prevM || 0);
+      prevMRef.current = s.M || 0;
+      setDeltaM(dM);
+
       // Rolling 30-tick buffer for transition rates (growing-window avg until 30 samples)
       bufferRef.current.push(transitionCounts);
       if (bufferRef.current.length > 30) bufferRef.current.shift();
@@ -70,6 +80,10 @@ export default function App() {
   }, [running, phase]);
 
   const handleSlider = useCallback((key, val) => {
+    setSliderHint(`${key} → ${val.toFixed(2)}`);
+    window.clearTimeout(window._sliderHintTimer);
+    window._sliderHintTimer = window.setTimeout(() => setSliderHint(null), 850);
+
     setSliders(prev => {
       const next = { ...prev, [key]: val };
       simRef.current?.updateSliders(next);
@@ -78,6 +92,7 @@ export default function App() {
   }, []);
 
   const handleRunPause = useCallback(() => setRunning(r => !r), []);
+  const handleToggleNetwork = useCallback(() => setShowNetwork(v => !v), []);
 
   const handleReset = useCallback(() => {
     setRunning(false);
@@ -85,6 +100,8 @@ export default function App() {
     eventsRef.current  = [];
     setEvents([]);
     setPhase('spawning');
+    setDeltaM(0);
+    prevMRef.current = 0;
     simRef.current?.reset(sliders);
   }, [sliders]);
 
@@ -97,17 +114,21 @@ export default function App() {
       <div className="main-layout">
         <LeftPanel
           stats={stats}
+          deltaM={deltaM}
+          sliderHint={sliderHint}
           sliders={sliders}
           onSliderChange={handleSlider}
           onRunPause={handleRunPause}
           onReset={handleReset}
+          onToggleNetwork={handleToggleNetwork}
+          showNetwork={showNetwork}
           running={running}
           history={history}
           transitionRates={transitionRates}
           eventsRef={eventsRef}
           particleTick={particleTick}
         />
-        <SimCanvas simRef={simRef} stats={stats} />
+        <SimCanvas simRef={simRef} stats={stats} showNetwork={showNetwork} />
         <EventFeed events={events} />
       </div>
 

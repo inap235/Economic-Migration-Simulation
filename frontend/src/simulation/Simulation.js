@@ -1,6 +1,6 @@
 import { Agent } from './Agent.js';
 import { assignMigDir } from './MapData.js';
-import { N_AGENTS } from '../config.js';
+import { N_AGENTS, ROMANIA_LIFE_COST, UKRAINE_LIFE_COST } from '../config.js';
 
 const sigmoid = x => 1 / (1 + Math.exp(-x));
 
@@ -98,6 +98,7 @@ export class Simulation {
           agent.state      = 'I';
           agent.halo       = 1.0;
           agent.migDir     = assignMigDir(agent);
+          agent.targetLifeCost = agent.migDir === 'west' ? ROMANIA_LIFE_COST : UKRAINE_LIFE_COST;
           agent.nearBorder = false;
           const ch         = getChannel(agent);
           agent.transitionChannel = ch;
@@ -129,8 +130,9 @@ export class Simulation {
         }
 
       } else if (agent.state === 'M') {
-        // P(M→R) = sigmoid(–1 + 0.6×f_home – 0.4×abroad_adapt) × 0.008
-        if (Math.random() < sigmoid(-1 + 0.6 * agent.f_home - 0.4 * agent.abroad_adapt) * 0.008) {
+        // P(M→R) = sigmoid(–1 + 0.6×f_home – 0.4×abroad_adapt + lifeCostEffect) × 0.008
+        const lifeCostEffect = 0.32 * ((agent.targetLifeCost ?? 0.62) * this.sliders.lifeCost - 0.62);
+        if (Math.random() < sigmoid(-1 + 0.6 * agent.f_home - 0.4 * agent.abroad_adapt + lifeCostEffect) * 0.008) {
           agent.state = 'R';
           agent.halo  = 0.8;
           newEvents.push({

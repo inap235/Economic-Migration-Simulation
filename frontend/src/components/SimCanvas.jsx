@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { GEO, MOLDOVA_BORDER } from '../config.js';
+import { GEO, MOLDOVA_BORDER, ROMANIA_BORDER, UKRAINE_BORDER } from '../config.js';
 import { WEST_ZONE, EAST_ZONE, WEST_EXIT, EAST_EXIT } from '../simulation/MapData.js';
 
 // ─── Orthographic Globe ───────────────────────────────────────────────────────
@@ -74,32 +74,8 @@ function drawGlobe(ctx, migFraction) {
     ctx.stroke();
   }
 
-  // Moldova fill (intensity driven by migration fraction)
-  ctx.fillStyle = `rgba(245,166,35,${(0.06 + migFraction * 0.18).toFixed(3)})`;
-  ctx.beginPath();
-  let first = true;
-  for (const [lat, lon] of MOLDOVA_BORDER) {
-    const p = orthoProject(lat, lon, cx, cy);
-    if (p.z < 0.02) { first = true; continue; }
-    if (first) { ctx.moveTo(p.x, p.y); first = false; } else ctx.lineTo(p.x, p.y);
-  }
-  ctx.closePath();
-  ctx.fill();
-
-  // Moldova border line
-  ctx.strokeStyle = `rgba(245,166,35,${(0.65 + migFraction * 0.3).toFixed(3)})`;
-  ctx.lineWidth   = 1.4;
-  first = true;
-  ctx.beginPath();
-  for (const [lat, lon] of MOLDOVA_BORDER) {
-    const p = orthoProject(lat, lon, cx, cy);
-    if (p.z < 0.02) { first = true; continue; }
-    if (first) { ctx.moveTo(p.x, p.y); first = false; } else ctx.lineTo(p.x, p.y);
-  }
-  ctx.stroke();
-
-  // Centroid migration-intensity pulse
-  const pc   = orthoProject(47.005, 28.857, cx, cy);
+  // Moldova centroid pulse (approximate highlight on globe)
+  const pc = orthoProject(47.005, 28.857, cx, cy);
   const pulsR = 4 + migFraction * 10;
   const pulse = ctx.createRadialGradient(pc.x, pc.y, 0, pc.x, pc.y, pulsR);
   pulse.addColorStop(0, `rgba(231,76,60,${(0.5 + migFraction * 0.45).toFixed(2)})`);
@@ -108,6 +84,13 @@ function drawGlobe(ctx, migFraction) {
   ctx.beginPath();
   ctx.arc(pc.x, pc.y, pulsR, 0, Math.PI * 2);
   ctx.fill();
+
+  // Minor Moldova highlight ring
+  ctx.strokeStyle = 'rgba(245,166,35,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(pc.x, pc.y, 7 + migFraction * 5, 0, Math.PI * 2);
+  ctx.stroke();
 
   ctx.restore();
 
@@ -132,6 +115,14 @@ const SC = { S: '#4A90D9', I: '#F5A623', M: '#E74C3C', R: '#2ECC71' };
 
 /** Map (lat, lon) → canvas (x, y). */
 function project(lat, lon, W, H, pad = 22) {
+  // Normalize service: if coordinates in [0,1], treat as normalized map fractions.
+  const isNormalized = lat >= 0 && lat <= 1 && lon >= 0 && lon <= 1;
+  if (isNormalized) {
+    const x = pad + lon * (W - 2 * pad);
+    const y = pad + (1 - lat) * (H - 2 * pad);
+    return [x, y];
+  }
+
   const x = pad + ((lon - GEO.lonMin) / (GEO.lonMax - GEO.lonMin)) * (W - 2 * pad);
   const y = pad + ((GEO.latMax - lat) / (GEO.latMax - GEO.latMin)) * (H - 2 * pad);
   return [x, y];
@@ -186,20 +177,88 @@ function drawExternalZones(ctx, W, H) {
   ctx.textAlign = 'left';
 }
 
-function drawBorder(ctx, W, H) {
+function drawPolygon(ctx, points, W, H, fill, stroke) {
+  if (!points || points.length < 3) return;
   ctx.beginPath();
-  MOLDOVA_BORDER.forEach(([lat, lon], i) => {
+  points.forEach(([lat, lon], i) => {
     const [x, y] = project(lat, lon, W, H);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.closePath();
-  ctx.fillStyle   = 'rgba(74,144,217,0.035)';
+  ctx.fillStyle   = fill;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(74,144,217,0.30)';
-  ctx.lineWidth   = 1.3;
-  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth   = 1.1;
+  ctx.setLineDash([7, 5]);
+  ctx.lineCap = 'round';
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.lineCap = 'butt';
+}
+
+function drawCountryEdge(ctx, points, W, H, color, width = 2.0, dash = [9, 5]) {
+  if (!points || points.length < 2) return;
+  ctx.beginPath();
+  points.forEach(([lat, lon], i) => {
+    const [x, y] = project(lat, lon, W, H);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash);
+  ctx.lineDashOffset = (Date.now() / 80) % 14; // subtle motion suggest flow
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineCap = 'butt';
+}
+
+function drawSplitCountryPanels(ctx, W, H) {
+  const w3 = W / 3;
+  // Romania (left)
+  ctx.fillStyle = 'rgba(43, 72, 123, 0.15)';
+  ctx.fillRect(0, 0, w3, H);
+  // Moldova (center)
+  ctx.fillStyle = 'rgba(197, 141, 42, 0.14)';
+  ctx.fillRect(w3, 0, w3, H);
+  // Ukraine (right)
+  ctx.fillStyle = 'rgba(139, 42, 52, 0.15)';
+  ctx.fillRect(w3 * 2, 0, w3, H);
+
+  // Vertical separators
+  ctx.strokeStyle = 'rgba(232,228,217,0.28)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(w3, 0); ctx.lineTo(w3, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w3 * 2, 0); ctx.lineTo(w3 * 2, H); ctx.stroke();
+
+  // country labels
+  ctx.font = 'bold 20px "IBM Plex Mono",monospace';
+  // Romania moved to left top, further right by even larger offset
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(80, 145, 214, 0.88)';
+  ctx.fillText('ROMANIA', 180, 28);
+  // Moldova and Ukraine remain same-level top labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(245, 166, 35, 0.88)';
+  ctx.fillText('MOLDOVA', w3 + w3 / 2, 28);
+  ctx.fillStyle = 'rgba(231, 76, 60, 0.88)';
+  ctx.fillText('UKRAINE', w3 * 2 + w3 / 2, 28);
+
+  // metric label
+  ctx.font      = '10px "IBM Plex Mono",monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(232,228,217,0.62)';
+  ctx.fillText('Split-screen country zones (left/center/right)', 10, H - 14);
+}
+
+function drawCountryBorders(ctx, W, H) {
+  // Only split-screen country sections; remove geographic outlines and dashed edges.
+  drawSplitCountryPanels(ctx, W, H);
+}
+
+function drawCountryLabels(ctx, W, H) {
+  // Disabled – split-screen headers are used instead (same horizontal level).
 }
 
 function drawGlow(ctx, W, H) {
@@ -221,6 +280,7 @@ function drawBorderClusterGlow(ctx, agents, W, H) {
   const westCluster = agents.filter(a => a.state === 'I' && a.nearBorder && a.migDir === 'west');
   const eastCluster = agents.filter(a => a.state === 'I' && a.nearBorder && a.migDir === 'east');
 
+  const pulse = 0.28 + 0.14 * Math.sin(Date.now() / 240);
   for (const [cluster] of [[westCluster], [eastCluster]]) {
     if (cluster.length < 4) continue;
     let sumX = 0, sumY = 0;
@@ -232,12 +292,12 @@ function drawBorderClusterGlow(ctx, agents, W, H) {
     const cy = sumY / cluster.length;
     const r  = Math.min(16 + cluster.length * 0.65, 52);
     const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0,   'rgba(245,166,35,0.20)');
-    g.addColorStop(0.45,'rgba(245,166,35,0.09)');
+    g.addColorStop(0,   `rgba(245,166,35,${(0.20 + pulse).toFixed(3)})`);
+    g.addColorStop(0.45, `rgba(245,166,35,${(0.05 + pulse * 0.8).toFixed(3)})`);
     g.addColorStop(1,   'transparent');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r + (2 + pulse * 12), 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -281,7 +341,7 @@ function drawLegend(ctx, W, H, s) {
 
 // ─── React component ──────────────────────────────────────────────────────────
 
-export default function SimCanvas({ simRef, stats }) {
+export default function SimCanvas({ simRef, stats, showNetwork }) {
   const canvasRef  = useRef(null);
   const rafRef     = useRef(null);
   const tooltipRef = useRef(null);
@@ -316,30 +376,32 @@ export default function SimCanvas({ simRef, stats }) {
       ctx.fillStyle = '#070B14';
       ctx.fillRect(0, 0, W, H);
 
-      // ── Ambient glow + external zones + Moldova border ───────────────────────
+          // ── Ambient glow + external zones + country borders ────────────────────
       drawGlow(ctx, W, H);
       drawExternalZones(ctx, W, H);
-      drawBorder(ctx, W, H);
+      drawCountryBorders(ctx, W, H);
 
       const sim    = simRef.current;
       const agents = sim?.agents ?? [];
 
       if (agents.length > 0) {
         // ── Network edges: I↔M neighbors (capped at 3 per agent for perf) ─────
-        ctx.globalAlpha = 0.11;
-        ctx.lineWidth   = 0.45;
-        for (const a of agents) {
-          if (a.state !== 'I' && a.state !== 'M') continue;
-          const [ax, ay] = project(a.lat, a.lon, W, H);
-          for (const ci of a.connections.slice(0, 3)) {
-            const b = agents[ci];
-            if (!b || (b.state !== 'I' && b.state !== 'M')) continue;
-            const [bx, by] = project(b.lat, b.lon, W, H);
-            ctx.strokeStyle = SC[a.state];
-            ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        if (showNetwork) {
+          ctx.globalAlpha = 0.15;
+          ctx.lineWidth   = 0.45;
+          for (const a of agents) {
+            if (a.state !== 'I' && a.state !== 'M') continue;
+            const [ax, ay] = project(a.lat, a.lon, W, H);
+            for (const ci of a.connections.slice(0, 3)) {
+              const b = agents[ci];
+              if (!b || (b.state !== 'I' && b.state !== 'M')) continue;
+              const [bx, by] = project(b.lat, b.lon, W, H);
+              ctx.strokeStyle = SC[a.state];
+              ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+            }
           }
+          ctx.globalAlpha = 1;
         }
-        ctx.globalAlpha = 1;
 
         // ── Border cluster glow ──────────────────────────────────────────────
         drawBorderClusterGlow(ctx, agents, W, H);

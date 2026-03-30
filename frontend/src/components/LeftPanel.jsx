@@ -9,6 +9,7 @@ const SLIDER_DEFS = [
   { key: 'migrationCost',   label: 'Migration Cost',     min: 0.5, max: 2.0, step: 0.05 },
   { key: 'networkStrength', label: 'Network Strength',   min: 0.5, max: 2.0, step: 0.05 },
   { key: 'cognitiveBias',   label: 'Cognitive Bias (δ)', min: 0.0, max: 1.0, step: 0.05 },
+  { key: 'lifeCost',        label: 'Life Cost',          min: 0.5, max: 2.0, step: 0.05 },
 ];
 
 const STATE_LABELS = { S: 'Staying', I: 'Intent', M: 'Migrated', R: 'Returned' };
@@ -35,7 +36,7 @@ function AnimCounter({ target, color }) {
   return <span className="counter-val" style={{ color }}>{disp.toLocaleString()}</span>;
 }
 
-export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, onReset, running, history, transitionRates, eventsRef, particleTick }) {
+export default function LeftPanel({ stats, deltaM, sliderHint, showNetwork, onToggleNetwork, sliders, onSliderChange, onRunPause, onReset, running, history, transitionRates, eventsRef, particleTick }) {
   const total = (stats.S || 0) + (stats.I || 0) + (stats.M || 0) + (stats.R || 0) || 1;
 
   return (
@@ -43,6 +44,19 @@ export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, 
       <header className="panel-header">
         <div className="panel-title">Moldova</div>
         <div className="panel-sub">Migration Simulator</div>
+        <div className="panel-row info-row">
+          <strong className="info-label">Δ Migrated</strong>
+          <span className="info-value" style={{ color: deltaM >= 0 ? '#2ECC71' : '#E74C3C' }}>
+            {deltaM >= 0 ? '+' : ''}{deltaM}
+          </span>
+        </div>
+        <div className="panel-row info-row">
+          <strong className="info-label">Life Cost</strong>
+          <span className="info-value">{sliders.lifeCost.toFixed(2)}</span>
+        </div>
+        {sliderHint && (
+          <div className="panel-row hint-row">Slider set: {sliderHint}</div>
+        )}
         <div className="panel-rule" />
       </header>
 
@@ -101,6 +115,9 @@ export default function LeftPanel({ stats, sliders, onSliderChange, onRunPause, 
       <section className="btn-row">
         <button className="btn-primary" onClick={onRunPause}>
           {running ? '⏸ Pause' : '▶ Run'}
+        </button>
+        <button className="btn-primary" onClick={onToggleNetwork}>
+          {showNetwork ? 'Hide net' : 'Show net'}
         </button>
         <button className="btn-ghost" onClick={onReset}>↺ Reset</button>
       </section>
