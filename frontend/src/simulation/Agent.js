@@ -60,8 +60,9 @@ export class Agent {
     this.lastZ             = 0;     // Z-score from last computeZ call; used by tooltip
 
     // ── Movement metadata ──────────────────────────────────────────────────────
-    this.migDir     = null;   // 'west' | 'east', assigned on S→I transition
-    this.nearBorder = false;  // true when within BORDER_PROXIMITY_DEG of exit point
+    this.migDir         = null;   // 'west' | 'east', assigned on S→I transition
+    this.nearBorder     = false;  // true when within BORDER_PROXIMITY_DEG of exit point
+    this.targetLifeCost = null;   // 0..1 normalized cost at destination
   }
 
   /**
@@ -90,6 +91,10 @@ export class Agent {
     const TT_i            = this.tiktok_influence * sliders.tiktokPressure;
     const social_pressure = (this.N_i + this.D_i) * sliders.networkStrength;
 
+    const targetLifeCost = this.targetLifeCost ?? 0.62; // Moldova baseline if unset
+    const lifeCostFactor = targetLifeCost * sliders.lifeCost;
+    const lifeCostTerm   = -1.8 * (lifeCostFactor - 0.60); // above 0.60 reduces migration utility
+
     const z = -1.2
       + 2.5 * (w_ext_adj - this.w_loc) * sliders.wageGap
       - 1.8 * this.cost                * sliders.migrationCost
@@ -97,7 +102,8 @@ export class Agent {
       + 2.0 * this.N_i
       + 1.2 * this.D_i
       + 0.9 * TT_i
-      + 0.8 * this.bias_surv;
+      + 0.8 * this.bias_surv
+      + lifeCostTerm;
 
     this.lastZ = z;
     return z;

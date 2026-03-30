@@ -35,6 +35,25 @@
   margin-bottom: 14px;
 }
 
+.info-row, .hint-row {
+  display: flex;
+  font-size: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  color: rgba(232,228,217,0.82);
+}
+
+.info-label {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.info-value {
+  font-weight: 700;
+}
+
 .panel-rule {
   height: 1px;
   background: var(--border);
