@@ -189,34 +189,64 @@ Each agent occupies one of four mutually exclusive states:
 Allowed transitions: `S → I → M → R → S`. The closure to `S` permits long-term equilibrium analysis.
 
 ### 5.2 Migration Utility Score (Z)
-For agent *i* at tick *t*:
+The Migration Utility Score ($Z$) is the core behavioral metric calculating an individual's net propensity to migrate. Instead of relying purely on classical push-pull economic theory, this metric is constructed as an additive linear combination of economic friction, social contagion, and psychological biases. It quantifies the bounded rationality of agents, explicitly separating the 'diaspora pull' (migrated friends signaling success) from 'peer contagion' (friends intending to leave, providing local social proof).
+
+For agent *i* at tick *t*, the score is computed as follows (see `computeZ()` in `Agent.js`):
 
 $$
 Z_i = -1.2
-+ 2.5 \cdot (w^{ext}_i (1 + \delta_i) - w^{loc}_i) \cdot s_{wage}
++ 2.5 \cdot (w^{ext}_i (1 + \delta_{eff}) - w^{loc}_i) \cdot s_{wage}
 - 1.8 \cdot c_i \cdot s_{cost}
 + 1.5 \cdot (N_i + D_i) \cdot s_{net}
 + 2.0 \cdot N_i
 + 1.2 \cdot D_i
-+ 0.9 \cdot \tau_i \cdot s_{tt}
++ 0.9 \cdot \tau_{eff}
 + 0.8 \cdot b^{surv}_i
+- 1.8 \cdot (l^{target}_i \cdot s_{life} - 0.60)
 $$
 
 | Symbol | Meaning |
 |---|---|
 | $w^{ext}_i$, $w^{loc}_i$ | Perceived external and local wages (normalized 0–4) |
-| $\delta_i$ | Optimism bias (overestimation of foreign wage) |
+| $\delta_{eff}$ | Effective optimism bias ($\delta_i \cdot s_{cog\_bias}$) |
 | $c_i$ | Migration cost (normalized) |
 | $N_i$ | Fraction of agent *i*'s network currently in state M (diaspora pull) |
 | $D_i$ | Fraction in state I (peer contagion) |
-| $\tau_i$ | TikTok influence weight |
+| $\tau_{eff}$ | Effective TikTok influence ($\tau_i \cdot s_{tt}$) |
 | $b^{surv}_i$ | Survivorship bias term |
-| $s_{wage}, s_{cost}, s_{net}, s_{tt}$ | User-controlled slider multipliers |
+| $l^{target}_i$ | Cost of living at the target destination ($0.62$ default for Moldova baseline) |
+| $s_{wage}, s_{cost}, s_{net}, s_{tt}, s_{cog\_bias}, s_{life}$ | User-controlled slider multipliers |
 
-The constant $-1.2$ reflects intrinsic inertia — the cost of disrupting one's life even when economic incentives are equal.
+To deeply understand the structural mechanics of the utility score, it is helpful to group its mathematical terms into four intuitive conceptual buckets:
+
+1. **Economic Rationality:** The term $2.5 \cdot (w^{ext}_i (1 + \delta_{eff}) - w^{loc}_i)$ calculates the anticipated financial gain of moving. It directly compares local wages with external wages. Crucially, it models *perceived* external wages, which are inflated by optimism and cognitive biases ($\delta_{eff}$), meaning agents often decide to move based on flawed, overly optimistic financial expectations.
+2. **Friction and Inertia:** The universal anchor constant ($-1.2$) establishes a baseline resistance, representing the profound psychological and emotional friction required to uproot one's life. This baseline is compounded by the specific migration cost penalty $-1.8 \cdot c_i \cdot s_{cost}$, simulating concrete logistical hurdles like travel expenses, visas, and relocation logistics.
+3. **Social Proof & Network Effects:** The model takes a nuanced approach by separating two distinct social phenomena. The $2.0 \cdot N_i$ multiplier captures "Diaspora Pull"—the powerful, tangible draw of friends and family who have successfully navigated the system and settled abroad. Conversely, $1.2 \cdot D_i$ accounts for "Peer Contagion"—the localized, somewhat ephemeral influence of neighbors who are merely *intending* or preparing to leave, supplying local social proof.
+4. **Digital and Media Interference:** Modern migration is heavily mediated by algorithms. The $0.8 \cdot b^{surv}_i$ (survivorship bias) and $0.9 \cdot \tau_{eff}$ (TikTok / Facebook influence) terms bypass traditional geographic networks entirely. They artificially accelerate the migration appetite by bombarding the agent with carefully curated success stories, entirely decoupled from objective macroeconomic realities.
+
+*Code Example (`Agent.js`):* The formula evaluates the economic utility against the actual cost of living. The life cost term penalizes the utility score when the destination's cost of living (adjusted dynamically by the interactive slider) exceeds the 0.60 baseline. Overestimating foreign wages through the `cognitiveBias` multiplier simulates unrealistic expectations fostered by social media.
+```javascript
+const delta           = this.bias_opt * sliders.cognitiveBias;
+const w_ext_adj       = this.w_ext * (1 + delta);
+const TT_i            = this.tiktok_influence * sliders.tiktokPressure;
+const social_pressure = (this.N_i + this.D_i) * sliders.networkStrength;
+const targetLifeCost  = this.targetLifeCost ?? 0.62;
+const lifeCostFactor  = targetLifeCost * sliders.lifeCost;
+const lifeCostTerm    = -1.8 * (lifeCostFactor - 0.60);
+```
+
+The constant $-1.2$ serves as a friction baseline, reflecting the intrinsic inertia of a population and the real-world friction of disrupting one's life even when economic incentives appear favorable on paper.
 
 ### 5.3 Transition Probabilities
-Logistic functions translate Z into per-tick transition probabilities:
+Logistic functions (represented by $\sigma$) translate the unbounded utility score $Z$ into normalized per-tick transition probabilities (see `Simulation.js`). Using logistic functions prevents immediate phase changes, accurately simulating the hesitation and friction observed in individual decision-making processes.
+
+Because agents process their choices asynchronously, these transition rates function as individual dice rolls mapping the conceptual 'intent' of an agent to a discrete physical move:
+
+- **S $\to$ I (Formation of Intent):** This represents the psychological shift towards migration. The process is a slow diffusion with a strict threshold penalty ($\theta_i$), governed by a base conversion rate of 0.02.
+- **I $\to$ M (Actual Migration):** The behavioral leap to emigrate relies heavily on logistical assurance. The catalyst here is $0.5 N_i$; having friends already settled abroad significantly bolsters the transition probability, translating intent into an actual border crossing.
+- **M $\to$ R (Return Migration):** Return decisions are primarily driven by emotional factors ($f^{home}_i$ vs. $a^{adapt}_i$) and economic strain, scaling slowly on a base multiplier of 0.008.
+
+In algorithmic terms, this transitions the deterministic utility score $Z_i$ into a stochastic Monte Carlo process. During every simulation tick, each agent effectively flips a dynamically weighted coin. The weighting of this coin is computed by sliding the utility score $Z_i$ through a corresponding logistic (sigmoid) curve, bounded structurally by a transition-specific base rate (e.g., $0.05$ for $I \to M$). This critical mechanic operates under the surface to ensure that even agents with overwhelmingly positive migration scores do not "teleport" instantly across mathematical states. Instead, they exhibit realistic human hesitation—gathering resources, weighing emotional ties, and resolving logistical friction—ensuring intent gradually translates into verifiable action, creating emergent socio-economic ripples.
 
 $$
 P(S \to I) = \sigma(Z_i - 0.4 \cdot \theta_i) \cdot 0.02
@@ -227,16 +257,25 @@ P(I \to M) = \sigma(0.3 + 0.8 Z_i + 0.5 N_i) \cdot 0.05
 $$
 
 $$
-P(M \to R) = \sigma(-1 + 0.6 f^{home}_i - 0.4 a^{adapt}_i) \cdot 0.008
+P(M \to R) = \sigma(-1 + 0.6 f^{home}_i - 0.4 a^{adapt}_i + 0.32(l^{target}_i \cdot s_{life} - 0.62)) \cdot 0.008
 $$
 
 $$
 P(R \to S) = 0.01
 $$
 
-with $\sigma(x) = 1/(1 + e^{-x})$, $\theta_i$ = personal threshold, $f^{home}_i$ = attachment to home, $a^{adapt}_i$ = ability to adapt abroad.
+with $\sigma(x) = 1/(1 + e^{-x})$, $\theta_i$ = personal threshold, $f^{home}_i$ = attachment to home, $a^{adapt}_i$ = ability to adapt abroad, and $0.32(l^{target}_i \cdot s_{life} - 0.62)$ modeling the effect of living costs accelerating or hindering return.
 
-The multiplicative *base rates* (0.02, 0.05, 0.008, 0.01) are calibrated so simulated diffusion timescales match observed migration data on the order of years across a few hundred ticks.
+*Code Example (`Simulation.js`):* The snippet below demonstrates how the return probability dynamically responds to destination living costs. When the `lifeCost` scales too high relative to expectations, homesickness becomes an economic necessity, pushing migrated users back to region 'R'.
+```javascript
+const lifeCostEffect = 0.32 * ((agent.targetLifeCost ?? 0.62) * this.sliders.lifeCost - 0.62);
+if (Math.random() < sigmoid(-1 + 0.6 * agent.f_home - 0.4 * agent.abroad_adapt + lifeCostEffect) * 0.008) {
+  agent.state = 'R';
+  // ...
+}
+```
+
+The multiplicative *base rates* (0.02, 0.05, 0.008, 0.01) are calibrated so simulated diffusion timescales match observed demographic data, condensing years of macroeconomic trends into a few hundred visualization ticks.
 
 ### 5.4 Macro Reference (Bass Diffusion)
 For comparison, the backend computes a closed-form macro trajectory:
@@ -308,7 +347,8 @@ function tick(simulation):
                 events.push(transition_event(agent, "I->M", z))
 
         elif agent.state == "M":
-            p = sigmoid(-1 + 0.6*agent.f_home - 0.4*agent.abroad_adapt) * 0.008
+            life_cost_effect = 0.32 * (agent.targetLifeCost * simulation.sliders.lifeCost - 0.62)
+            p = sigmoid(-1 + 0.6*agent.f_home - 0.4*agent.abroad_adapt + life_cost_effect) * 0.008
             if random() < p:
                 agent.state = "R"
                 events.push(transition_event(agent, "M->R", z))
@@ -349,14 +389,17 @@ function Agent.move():
                 apply_drift_toward(target, SPEED_RETURN)
 ```
 
-### 6.3 Network Influence Update (race-free)
-A naive sequential implementation would let an agent's transition affect its neighbor's `N_i` *within the same tick*, producing artificial cascades. The implementation therefore:
+### 6.3 Network Influence Update (Race-Free Concurrency)
+A common mathematical and architectural pitfall in agent-based modeling is the unintended introduction of intra-tick cascade effects ("domino effects"). A naive, sequential implementation would evaluate agents one by one within the `tick()` function loop. In such a flawed and physically unrealistic model, if Agent A decides to migrate, their neighbor Agent B (subsequently evaluated in the exact same loop) instantaneously experiences a higher $N_i$ value, potentially tipping them over the threshold into migrating as well. This creates a statistical chain reaction artificially bound to the order in which agents are mathematically indexed within the system.
 
-1. **Snapshots** the population state at the start of each tick.
-2. Computes all `N_i` / `D_i` from the snapshot.
-3. *Then* evaluates transitions.
+To preserve the behavioral integrity of the emergent dynamics, the simulation implements a strict two-phase synchronous update scheme. This design closely mirrors the `synchronous update` principles defined in classic cellular automata architectures.
 
-This synchronous-update scheme is standard in ABM and ensures reproducibility under fixed seed.
+As implemented in `_updateNetworkInfluence()` inside `Simulation.js`:
+
+1. **Snapshot Phase:** At the exact start of every computational tick—before any transition probabilities are evaluated—the simulation conceptually freezes the global state. It iterates meticulously through the entire network topology, computing the $N_i$ and $D_i$ values accurately and identically for all agents based purely on the historical state of the system at $t-1$.
+2. **Evaluation Phase:** Only after all social network parameters are statically pre-computed, cached, and stored onto the individual agent objects, do the transition probabilities evaluate. 
+
+This synchronous, two-phase operation guarantees that an agent's individual decision to change state is genuinely influenced by what their peers *have already demonstrably done* in prior ticks, enforcing a causal chain grounded in authentic behavioral and informational lag. It completely eliminates memory-race conditions and makes the entire simulation macro-trajectory precisely mathematically reproducible when supplied with a predetermined pseudo-random seed.
 
 ### 6.4 Data Preprocessing & Normalization
 - **Wages** are sampled from log-normal distributions, then min-max normalized to a 0–4 range so coefficients in Z remain interpretable.
