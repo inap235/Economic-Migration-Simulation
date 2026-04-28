@@ -1,6 +1,32 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { GEO, MOLDOVA_BORDER, ROMANIA_BORDER, UKRAINE_BORDER } from '../config.js';
-import { WEST_ZONE, EAST_ZONE, WEST_EXIT, EAST_EXIT } from '../simulation/MapData.js';
+import { geoPath, geoTransform } from 'd3-geo';
+import { feature } from 'topojson-client';
+import worldData from 'world-atlas/countries-110m.json';
+import { GEO } from '../config.js';
+import { WEST_ZONE, EAST_ZONE } from '../simulation/MapData.js';
+
+// ─── Country GeoJSON features (Moldova=498, Romania=642, Ukraine=804) ─────────
+let _countries = [];
+try {
+  _countries = feature(worldData, worldData.objects.countries).features;
+} catch (e) {
+  console.error('[SimCanvas] Failed to parse world-atlas country data:', e);
+}
+const COUNTRY_FEATURES = {
+  MDA: _countries.find(f => +f.id === 498),
+  ROU: _countries.find(f => +f.id === 642),
+  UKR: _countries.find(f => +f.id === 804),
+};
+const COUNTRY_STYLE = {
+  MDA: { fill: 'rgba(197,141,42,0.13)',  stroke: 'rgba(245,166,35,0.70)',  lineWidth: 1.5 },
+  ROU: { fill: 'rgba(43,72,123,0.11)',   stroke: 'rgba(80,145,214,0.50)',  lineWidth: 1.0 },
+  UKR: { fill: 'rgba(139,42,52,0.11)',   stroke: 'rgba(231,76,60,0.50)',   lineWidth: 1.0 },
+};
+const COUNTRY_LABEL = {
+  MDA: { lat: 47.20, lon: 28.40, color: 'rgba(245,166,35,0.88)',  text: 'MOLDOVA' },
+  ROU: { lat: 45.90, lon: 25.10, color: 'rgba(80,145,214,0.88)',  text: 'ROMANIA' },
+  UKR: { lat: 48.60, lon: 29.80, color: 'rgba(231,76,60,0.88)',   text: 'UKRAINE' },
+};
 
 // ─── Orthographic Globe ───────────────────────────────────────────────────────
 const GLOBE_R   = 78;
@@ -177,88 +203,51 @@ function drawExternalZones(ctx, W, H) {
   ctx.textAlign = 'left';
 }
 
-function drawPolygon(ctx, points, W, H, fill, stroke) {
-  if (!points || points.length < 3) return;
-  ctx.beginPath();
-  points.forEach(([lat, lon], i) => {
-    const [x, y] = project(lat, lon, W, H);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+/** Build a d3 stream transform that replicates project() exactly. */
+function makeGeoTransform(W, H, pad = 22) {
+  return geoTransform({
+    point(lon, lat) {
+      const x = pad + ((lon - GEO.lonMin) / (GEO.lonMax - GEO.lonMin)) * (W - 2 * pad);
+      const y = pad + ((GEO.latMax - lat) / (GEO.latMax - GEO.latMin)) * (H - 2 * pad);
+      this.stream.point(x, y);
+    },
   });
-  ctx.closePath();
-  ctx.fillStyle   = fill;
-  ctx.fill();
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth   = 1.1;
-  ctx.setLineDash([7, 5]);
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.lineCap = 'butt';
 }
 
-function drawCountryEdge(ctx, points, W, H, color, width = 2.0, dash = [9, 5]) {
-  if (!points || points.length < 2) return;
-  ctx.beginPath();
-  points.forEach(([lat, lon], i) => {
-    const [x, y] = project(lat, lon, W, H);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.closePath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.setLineDash(dash);
-  ctx.lineDashOffset = (Date.now() / 80) % 14; // subtle motion suggest flow
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.lineCap = 'butt';
+// Cache keyed on canvas dimensions — rebuilt only on resize, not every frame.
+let _pathGenCache = null;
+function getPathGen(ctx, W, H) {
+  if (!_pathGenCache || _pathGenCache.W !== W || _pathGenCache.H !== H) {
+    _pathGenCache = { W, H, gen: geoPath().context(ctx).projection(makeGeoTransform(W, H)) };
+  }
+  return _pathGenCache.gen;
 }
 
-function drawSplitCountryPanels(ctx, W, H) {
-  const w3 = W / 3;
-  // Romania (left)
-  ctx.fillStyle = 'rgba(43, 72, 123, 0.15)';
-  ctx.fillRect(0, 0, w3, H);
-  // Moldova (center)
-  ctx.fillStyle = 'rgba(197, 141, 42, 0.14)';
-  ctx.fillRect(w3, 0, w3, H);
-  // Ukraine (right)
-  ctx.fillStyle = 'rgba(139, 42, 52, 0.15)';
-  ctx.fillRect(w3 * 2, 0, w3, H);
+function drawCountryShapes(ctx, W, H) {
+  const pathGen = getPathGen(ctx, W, H);
 
-  // Vertical separators
-  ctx.strokeStyle = 'rgba(232,228,217,0.28)';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(w3, 0); ctx.lineTo(w3, H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(w3 * 2, 0); ctx.lineTo(w3 * 2, H); ctx.stroke();
+  for (const [key, feat] of Object.entries(COUNTRY_FEATURES)) {
+    if (!feat) continue;
+    const style = COUNTRY_STYLE[key];
+    ctx.beginPath();
+    pathGen(feat);
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth   = style.lineWidth;
+    ctx.setLineDash([]);
+    ctx.stroke();
+  }
 
-  // country labels
-  ctx.font = 'bold 20px "IBM Plex Mono",monospace';
-  // Romania moved to left top, further right by even larger offset
-  ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(80, 145, 214, 0.88)';
-  ctx.fillText('ROMANIA', 180, 28);
-  // Moldova and Ukraine remain same-level top labels
+  // Labels at geographic centroids
+  ctx.font      = 'bold 11px "IBM Plex Mono",monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(245, 166, 35, 0.88)';
-  ctx.fillText('MOLDOVA', w3 + w3 / 2, 28);
-  ctx.fillStyle = 'rgba(231, 76, 60, 0.88)';
-  ctx.fillText('UKRAINE', w3 * 2 + w3 / 2, 28);
-
-  // metric label
-  ctx.font      = '10px "IBM Plex Mono",monospace';
+  for (const lbl of Object.values(COUNTRY_LABEL)) {
+    const [x, y] = project(lbl.lat, lbl.lon, W, H);
+    ctx.fillStyle = lbl.color;
+    ctx.fillText(lbl.text, x, y);
+  }
   ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(232,228,217,0.62)';
-  ctx.fillText('Split-screen country zones (left/center/right)', 10, H - 14);
-}
-
-function drawCountryBorders(ctx, W, H) {
-  // Only split-screen country sections; remove geographic outlines and dashed edges.
-  drawSplitCountryPanels(ctx, W, H);
-}
-
-function drawCountryLabels(ctx, W, H) {
-  // Disabled – split-screen headers are used instead (same horizontal level).
 }
 
 function drawGlow(ctx, W, H) {
@@ -379,7 +368,7 @@ export default function SimCanvas({ simRef, stats, showNetwork }) {
           // ── Ambient glow + external zones + country borders ────────────────────
       drawGlow(ctx, W, H);
       drawExternalZones(ctx, W, H);
-      drawCountryBorders(ctx, W, H);
+      drawCountryShapes(ctx, W, H);
 
       const sim    = simRef.current;
       const agents = sim?.agents ?? [];
