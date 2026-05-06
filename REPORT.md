@@ -199,13 +199,13 @@ $$Z_i = -1.2 + 2.5 \cdot (w^{\text{ext}}_i (1 + \delta_{\text{eff}}) - w^{\text{
 |---|---|
 | $$w^{\text{ext}}_i$$, $$w^{\text{loc}}_i$$ | Perceived external and local wages (normalized 0–4) |
 | $$\delta_{\text{eff}}$$ | Effective optimism bias ($$\delta_i \cdot s_{\text{cog\_bias}}$$) |
-| $$c_i$$ | Migration cost (normalized) |
-| $$N_i$$ | Fraction of agent $$i$$'s network currently in state M (diaspora pull) |
-| $$D_i$$ | Fraction in state I (peer contagion) |
+| $$c_i$$ | Migration cost (normalized to 0–1 range) |
+| $$N_i$$ | Fraction of agent $$i$$'s network currently in state M (diaspora pull effect) |
+| $$D_i$$ | Fraction of agent $$i$$'s network currently in state I (peer contagion effect) |
 | $$\tau_{\text{eff}}$$ | Effective TikTok influence ($$\tau_i \cdot s_{\text{tt}}$$) |
-| $$b^{\text{surv}}_i$$ | Survivorship bias term |
+| $$b^{\text{surv}}_i$$ | Survivorship bias term (curated success stories on social media) |
 | $$l^{\text{target}}_i$$ | Cost of living at the target destination (0.62 default for Moldova baseline) |
-| $$s_{\text{wage}}, s_{\text{cost}}, s_{\text{net}}, s_{\text{tt}}, s_{\text{cog\_bias}}, s_{\text{life}}$$ | User-controlled slider multipliers |
+| $$s_{\text{wage}}, s_{\text{cost}}, s_{\text{net}}, s_{\text{tt}}, s_{\text{cog\_bias}}, s_{\text{life}}$$ | User-controlled slider multipliers (policy intervention levers) |
 
 To deeply understand the structural mechanics of the utility score, it is helpful to group its mathematical terms into four intuitive conceptual buckets:
 
