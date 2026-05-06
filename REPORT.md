@@ -197,12 +197,12 @@ $$Z_i = -1.2 + 2.5 \cdot (w^{\text{ext}}_i (1 + \delta_{\text{eff}}) - w^{\text{
 
 | Symbol | Meaning |
 |---|---|
-| $$w^{\text{ext}}_i$$, $$w^{\text{loc}}_i$$ | Perceived external and local wages (normalized 0–4) |
-| $$\delta_{\text{eff}}$$ | Effective optimism bias ($$\delta_i \cdot s_{\text{cog\_bias}}$$) |
+| $$w^{\text{ext}}_i, w^{\text{loc}}_i$$ | Perceived external and local wages (normalized 0–4) |
+| $$\delta_{\text{eff}}$$ | Effective optimism bias ($\delta_i \cdot s_{\text{cog\_bias}}$) |
 | $$c_i$$ | Migration cost (normalized to 0–1 range) |
 | $$N_i$$ | Fraction of agent $$i$$'s network currently in state M (diaspora pull effect) |
 | $$D_i$$ | Fraction of agent $$i$$'s network currently in state I (peer contagion effect) |
-| $$\tau_{\text{eff}}$$ | Effective TikTok influence ($$\tau_i \cdot s_{\text{tt}}$$) |
+| $$\tau_{\text{eff}}$$ | Effective TikTok influence ($\tau_i \cdot s_{\text{tt}}$) |
 | $$b^{\text{surv}}_i$$ | Survivorship bias term (curated success stories on social media) |
 | $$l^{\text{target}}_i$$ | Cost of living at the target destination (0.62 default for Moldova baseline) |
 | $$s_{\text{wage}}, s_{\text{cost}}, s_{\text{net}}, s_{\text{tt}}, s_{\text{cog\_bias}}, s_{\text{life}}$$ | User-controlled slider multipliers (policy intervention levers) |
@@ -582,10 +582,10 @@ More broadly, the platform is a template — its architecture generalizes to any
 ### Diagram 1 — State Machine
 A compact directed graph showing the four states **S**, **I**, **M**, **R** with the four transitions, labeled with their probability formulas:
 ```
-   S ──σ(Z − 0.4θ)·0.02──► I ──σ(0.3 + 0.8Z + 0.5N)·0.05──► M
-   ▲                                                          │
-   │                                                          │
-   └──────── 0.01 ─────── R ◄── σ(−1 + 0.6f − 0.4a)·0.008 ────┘
+   S --\sigma(Z - 0.4\theta) \cdot 0.02--> I --\sigma(0.3 + 0.8Z + 0.5N) \cdot 0.05--> M
+   ^                                                          |
+   |                                                          |
+   +---------------- 0.01 ----------------- R <-- \sigma(-1 + 0.6f - 0.4a) \cdot 0.008 ----+
 ```
 Useful as a single hero diagram on the landing page and in academic papers.
 
